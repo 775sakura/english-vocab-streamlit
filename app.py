@@ -226,32 +226,74 @@ if nav_choice == "📚 単語の管理・一覧":
     
     # 検索フィルター
     search_query = st.text_input("🔍 単語・意味で検索", "").strip().lower()
+
+    col_form1, col_form2 = st.columns(2)
     
     # 単語追加フォーム（英単語/熟語と意味のみ入力）
-    with st.expander("➕ 新しい単語を手動追加", expanded=False):
-        with st.form("add_form", clear_on_submit=True):
-            col_w, col_m = st.columns(2)
-            with col_w:
+    with col_form1:
+        with st.expander("➕ 新しい単語を手動追加", expanded=False):
+            with st.form("add_form", clear_on_submit=True):
                 w_input = st.text_input("英単語 / 熟語 *", placeholder="例: resilience")
-            with col_m:
                 m_input = st.text_input("日本語の意味 *", placeholder="例: 回復力、復元力")
-            
-            submitted = st.form_submit_button("単語を追加・保存")
-            if submitted:
-                if w_input and m_input:
-                    new_item = {
-                        "id": f"custom-{len(st.session_state.word_list) + 1}",
-                        "word": w_input,
-                        "meaning": m_input,
-                        "wrong_count": 0,
-                        "correct_count": 0
-                    }
-                    st.session_state.word_list.append(new_item)
-                    save_words(st.session_state.word_list)
-                    st.success(f"「{w_input}」を追加・保存しました！")
-                    st.rerun()
-                else:
-                    st.warning("英単語と日本語の意味は必須です。")
+                
+                submitted = st.form_submit_button("単語を追加・保存", use_container_width=True)
+                if submitted:
+                    if w_input and m_input:
+                        new_item = {
+                            "id": f"custom-{len(st.session_state.word_list) + 1}",
+                            "word": w_input,
+                            "meaning": m_input,
+                            "wrong_count": 0,
+                            "correct_count": 0
+                        }
+                        st.session_state.word_list.append(new_item)
+                        save_words(st.session_state.word_list)
+                        st.success(f"「{w_input}」を追加・保存しました！")
+                        st.rerun()
+                    else:
+                        st.warning("英単語と日本語の意味は必須です。")
+
+    # 単語編集・削除フォーム
+    with col_form2:
+        with st.expander("✏️ 登録済み単語の編集・削除", expanded=False):
+            if not st.session_state.word_list:
+                st.info("登録されている単語がありません。")
+            else:
+                # 編集・削除対象の単語を選択
+                word_options = [f"{w['word']} : {w['meaning']}" for w in st.session_state.word_list]
+                selected_word_str = st.selectbox("編集・削除する単語を選択", word_options)
+                
+                if selected_word_str:
+                    # 選択中のインデックスとオブジェクトを特定
+                    selected_idx = word_options.index(selected_word_str)
+                    target_word_obj = st.session_state.word_list[selected_idx]
+
+                    with st.form("edit_delete_form"):
+                        edit_w = st.text_input("英単語 / 熟語", value=target_word_obj["word"])
+                        edit_m = st.text_input("日本語の意味", value=target_word_obj["meaning"])
+                        
+                        btn_col1, btn_col2 = st.columns(2)
+                        with btn_col1:
+                            update_submitted = st.form_submit_button("✏️ 変更を保存", use_container_width=True)
+                        with btn_col2:
+                            delete_submitted = st.form_submit_button("🗑️ この単語を削除", type="secondary", use_container_width=True)
+
+                        if update_submitted:
+                            if edit_w and edit_m:
+                                st.session_state.word_list[selected_idx]["word"] = edit_w
+                                st.session_state.word_list[selected_idx]["meaning"] = edit_m
+                                save_words(st.session_state.word_list)
+                                st.success(f"「{edit_w}」の情報を更新しました！")
+                                st.rerun()
+                            else:
+                                st.warning("英単語と意味の両方を入力してください。")
+                                
+                        if delete_submitted:
+                            deleted_name = target_word_obj["word"]
+                            st.session_state.word_list.pop(selected_idx)
+                            save_words(st.session_state.word_list)
+                            st.success(f"「{deleted_name}」を削除しました。")
+                            st.rerun()
 
     # 一覧のフィルタリング
     filtered_words = [
@@ -396,7 +438,6 @@ elif nav_choice == "🎴 暗記カード・確認テスト":
                 # テスト用キューの作成
                 words_pool = list(st.session_state.word_list)
                 if quiz_mode == "苦手単語優先 (誤答が多い単語)":
-                    # 間違えた回数が多い順にソート（同数はランダム）
                     random.shuffle(words_pool)
                     words_pool.sort(key=lambda x: x.get("wrong_count", 0), reverse=True)
                 else:
@@ -424,7 +465,7 @@ elif nav_choice == "🎴 暗記カード・確認テスト":
                     st.markdown(f"#### **第 {idx + 1} 問 / 全 {len(queue)} 問**")
                     st.markdown(f"### 問題: **{curr_q['word']}** の正しい意味は？")
                     
-                    # 選択肢の生成 (初回のみ生成)
+                    # 選択肢の生成
                     choice_key = f"quiz_choices_{idx}"
                     if choice_key not in st.session_state:
                         others = [w for w in st.session_state.word_list if w["id"] != curr_q["id"]]
@@ -497,7 +538,7 @@ elif nav_choice == "🎴 暗記カード・確認テスト":
                         st.rerun()
 
 # ---------------------------------------------------------
-# 4. A4テスト印刷・PDF出力 (タイトル固定・50問/1枚対応)
+# 4. A4テスト印刷・PDF出力 (タイトル固定・50問/1枚・セル左揃え・印刷時ボタン非表示)
 # ---------------------------------------------------------
 elif nav_choice == "🖨️ A4テスト印刷・PDF":
     st.header("🖨️ A4 印刷用テストシート作成")
@@ -507,7 +548,8 @@ elif nav_choice == "🖨️ A4テスト印刷・PDF":
     else:
         col1, col2 = st.columns(2)
         with col1:
-            test_mode = st.selectbox("テスト出力形式", ["英単語 → 日本語の意味", "日本語の意味 → 英単語", "単語帳一覧シート"])
+            # 「単語帳一覧シート」を削り、2種類の形式のみ
+            test_mode = st.selectbox("テスト出力形式", ["英単語 → 日本語の意味", "日本語の意味 → 英単語"])
         with col2:
             is_shuffle = st.checkbox("問題をランダム順にする", value=True)
             show_ans = st.checkbox("解答をあらかじめ印字する (解答集)", value=False)
@@ -517,11 +559,9 @@ elif nav_choice == "🖨️ A4テスト印刷・PDF":
             random.seed(42)
             print_words = random.sample(print_words, len(print_words))
 
-        # 常に固定タイトル
         FIXED_TITLE = "英単語確認テスト"
 
-        # 50問/1枚(左右2列)に対応した HTML/CSS の生成
-        # 単語数を最大50問に調整または50問単位に分割
+        # 50問/1枚(左右2列 25問ずつ)
         words_50 = print_words[:50]
         left_words = words_50[:25]
         right_words = words_50[25:50]
@@ -532,12 +572,9 @@ elif nav_choice == "🖨️ A4テスト印刷・PDF":
                 if test_mode == "英単語 → 日本語の意味":
                     col_q = f"<b>{w['word']}</b>"
                     col_a = w['meaning'] if show_ans else ""
-                elif test_mode == "日本語の意味 → 英単語":
+                else:  # 日本語の意味 → 英単語
                     col_q = w['meaning']
                     col_a = f"<b>{w['word']}</b>" if show_ans else ""
-                else:
-                    col_q = f"<b>{w['word']}</b>"
-                    col_a = f"{w['meaning']}"
 
                 rows += f"""
                 <tr class="item-row">
@@ -559,7 +596,7 @@ elif nav_choice == "🖨️ A4テスト印刷・PDF":
             <style>
                 @page {{
                     size: A4 portrait;
-                    margin: 8mm 10mm;
+                    margin: 10mm 12mm;
                 }}
                 body {{
                     font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif;
@@ -579,8 +616,8 @@ elif nav_choice == "🖨️ A4テスト印刷・PDF":
                     justify-content: space-between;
                     align-items: flex-end;
                     border-bottom: 2px solid #0f172a;
-                    padding-bottom: 4px;
-                    margin-bottom: 8px;
+                    padding-bottom: 6px;
+                    margin-bottom: 12px;
                 }}
                 .title-text {{
                     font-size: 18px;
@@ -589,12 +626,12 @@ elif nav_choice == "🖨️ A4テスト印刷・PDF":
                 .score-area {{
                     font-size: 11px;
                     border: 1px solid #475569;
-                    padding: 2px 8px;
+                    padding: 3px 10px;
                     border-radius: 4px;
                 }}
                 .columns-container {{
                     display: flex;
-                    gap: 12px;
+                    gap: 16px;
                 }}
                 .column {{
                     flex: 1;
@@ -606,11 +643,15 @@ elif nav_choice == "🖨️ A4テスト印刷・PDF":
                 th {{
                     background-color: #f1f5f9;
                     border-bottom: 1px solid #64748b;
-                    padding: 3px 4px;
+                    padding: 5px;
                     font-size: 10px;
+                    text-align: left; /* 表記をセル左揃えに設定 */
+                }}
+                th.col-no {{
+                    text-align: center;
                 }}
                 .item-row {{
-                    height: 25px;
+                    height: 33px; /* 50問でA4下部までピッタリ収まる高さ */
                     border-bottom: 1px solid #cbd5e1;
                 }}
                 .col-no {{
@@ -621,18 +662,29 @@ elif nav_choice == "🖨️ A4テスト印刷・PDF":
                 }}
                 .col-q {{
                     width: 44%;
-                    padding: 2px 4px;
+                    padding: 4px 6px;
                     font-size: 11px;
+                    text-align: left; /* 問題文を左揃え */
                 }}
                 .col-a {{
                     width: 48%;
-                    padding: 2px 4px;
+                    padding: 4px 6px;
                     font-size: 11px;
+                    text-align: left; /* 解答欄を左揃え */
+                }}
+                /* 印刷時・PDF出力時にボタンを消すためのスタイル */
+                @media print {{
+                    .no-print {{
+                        display: none !important;
+                    }}
+                    @page {{
+                        margin: 10mm 12mm;
+                    }}
                 }}
             </style>
         </head>
         <body>
-            <div style="margin-bottom: 10px;" class="no-print">
+            <div style="margin-bottom: 12px;" class="no-print">
                 <button onclick="window.print()" style="background-color: #2563eb; color: #ffffff; border: none; padding: 8px 18px; font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer;">
                     🖨️ A4用紙に印刷 / PDF保存
                 </button>
@@ -669,4 +721,4 @@ elif nav_choice == "🖨️ A4テスト印刷・PDF":
         </html>
         """
         
-        st.components.v1.html(full_html, height=900, scrolling=True)
+        st.components.v1.html(full_html, height=1000, scrolling=True)
